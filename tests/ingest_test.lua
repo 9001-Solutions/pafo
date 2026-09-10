@@ -1,0 +1,47 @@
+local h = require('tests.harness')
+local ingest = require('core.ingest')
+
+h.check('transport failure retries', function()
+    local r = ingest.classify(nil, 'timeout')
+    h.eq(r.kind, 'retry')
+end)
+
+h.check('200 returns counts and rejected list', function()
+    local r = ingest.classify(200, { accepted = 3, duplicates = 1, rejected = { { index = 2, reason = 'bad id' } } })
+    h.eq(r.kind, 'ok')
+    h.eq(r.accepted, 3)
+    h.eq(r.duplicates, 1)
+    h.eq(#r.rejected, 1)
+end)
+
+h.check('401 halts for auth', function()
+    h.eq(ingest.classify(401, { error = 'invalid_token' }).kind, 'auth')
+end)
+
+h.check('403 server_disabled drops queued events', function()
+    h.eq(ingest.classify(403, { error = 'server_disabled' }).kind, 'server_disabled')
+    h.eq(ingest.classify(403, { error = 'nope' }).kind, 'drop_batch')
+end)
+
+h.check('429 carries Retry-After', function()
+    local r = ingest.classify(429, { error = 'rate_limited' }, { ['Retry-After'] = '600' })
+    h.eq(r.kind, 'rate_limited')
+    h.eq(r.retry_after, 600)
+    h.eq(ingest.classify(429, {}, {}).retry_after, nil)
+end)
+
+h.check('400 unsupported_protocol marks addon outdated', function()
+    h.eq(ingest.classify(400, { error = 'unsupported_protocol' }).kind, 'outdated')
+end)
+
+h.check('400 with per-event rejections is a partial refusal', function()
+    local r = ingest.classify(400, { rejected = { { index = 0, reason = 'bad ago' } } })
+    h.eq(r.kind, 'partial')
+    h.eq(#r.rejected, 1)
+end)
+
+h.check('other 400 drops the batch, 5xx retries', function()
+    h.eq(ingest.classify(400, { error = 'bad_json' }).kind, 'drop_batch')
+    h.eq(ingest.classify(503, nil).kind, 'retry')
+    h.eq(ingest.classify(413, nil).kind, 'drop_batch')
+end)

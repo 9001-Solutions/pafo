@@ -1,0 +1,38 @@
+local h = require('tests.harness')
+local bytes = require('core.bytes')
+
+h.check('u16 and u32 are little-endian', function()
+    local s = string.char(0x34, 0x12, 0x78, 0x56, 0x01, 0x00)
+    h.eq(bytes.u16(s, 0), 0x1234)
+    h.eq(bytes.u32(s, 0), 0x56781234)
+    h.eq(bytes.u8(s, 4), 1)
+end)
+
+h.check('u32 handles values above 2^31 without sign', function()
+    local s = string.char(0xFF, 0xFF, 0xFF, 0xFF)
+    h.eq(bytes.u32(s, 0), 4294967295)
+end)
+
+h.check('reads past the end return zero', function()
+    h.eq(bytes.u16('a', 5), 0)
+end)
+
+h.check('bit reader consumes LSB first across bytes', function()
+    local r = bytes.reader(string.char(0xB5, 0x03), 0)
+    h.eq(r:read(3), 5)
+    h.eq(r:read(6), 54)
+    h.eq(r:read(7), 1)
+end)
+
+h.check('bit reader aligned 32 bit read matches u32', function()
+    local s = string.char(0x00, 0x11, 0x22, 0x33, 0x44)
+    local r = bytes.reader(s, 1)
+    h.eq(r:read(32), bytes.u32(s, 1))
+end)
+
+h.check('bit reader errors on overrun', function()
+    local r = bytes.reader(string.char(1), 0)
+    r:read(8)
+    local ok = pcall(function() r:read(1) end)
+    h.eq(ok, false)
+end)
