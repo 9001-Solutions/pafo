@@ -182,7 +182,11 @@ otherwise fully observed) after a battlefield win.
 
 ### 4.4 Steal / despoil events
 
-Emitted per attempt, including failures.
+The player's own attempts are emitted per attempt, including failures.
+Other players' steals and despoils are emitted only when they succeed
+(`result: "item"`): the item is what identifies a monster's steal table,
+their failures would only inflate attempt counts, and several reporters
+can see the same steal.
 
     {
       "id": "...", "type": "steal", "ago": 2, "zone_id": 103,
@@ -196,8 +200,10 @@ Emitted per attempt, including failures.
 - `nothing_left` = the client message indicating the mob has nothing to
   steal (excluded from trial counts server-side; still send it).
 - `type: "despoil"` has the identical shape.
-- Only the player's own attempts are recorded (other players' steal
-  outcomes are not reliably observable).
+- An active quest can swap a monster's steal result for a quest item. The
+  addon cannot see anyone's quest state, so such items arrive as ordinary
+  steals; consumers should treat a rarely seen steal item next to a
+  common one as suspect rather than as part of the steal table.
 
 ## 5. Treasure Hunter attribution
 
@@ -310,6 +316,8 @@ mob the addon will report, show a small non-blocking prompt: "Does
 
 ## 10. Spec changelog
 
+- 2026-09-11a: other players' successful steals and despoils are
+  recorded (item only, no failures); quest-swapped steal items noted.
 - 2026-09-10d: `/pafo server` removed. The active server comes only from
   detection and is not read back from saved settings.
 - 2026-09-10c: `th_plus_item_ids` is derived server-side from item data.
@@ -333,5 +341,4 @@ mob the addon will report, show a small non-blocking prompt: "Does
 - No packet transmission to game servers, no automation, no in-game UI
   beyond the prompt/status lines and the small config window.
 - No local drop-rate display (the website is the display surface).
-- No capture of other players' steal results, fishing, gathering,
-  chests/coffers.
+- No capture of fishing, gathering, or chests/coffers.

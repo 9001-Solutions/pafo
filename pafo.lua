@@ -1,6 +1,6 @@
 addon.name = 'pafo'
 addon.author = 'Hanayaka'
-addon.version = '0.1.0'
+addon.version = '0.2.0'
 addon.desc = 'Records drop observations and submits them to the PSXI drop-rate aggregator.'
 addon.link = 'https://www.psxi.gg/'
 
@@ -283,7 +283,7 @@ local function handle_action(data)
     local t = now()
     local zone = game.zone_id()
 
-    if action.actor_id == me.server_id then
+    if not game.is_mob_id(action.actor_id) then
         for _, ev in ipairs(steallib.from_action(action, me.server_id)) do
             local ent = game.entity_by_id(ev.mob_id)
             push_event(steallib.to_event(ev, t, zone, ent and ent.name or 'unknown'))

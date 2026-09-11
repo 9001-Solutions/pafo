@@ -45,13 +45,14 @@ local function classify(res)
 end
 
 function steal.from_action(action, self_id)
-    if not steal.CMDS[action.cmd_no] or action.actor_id ~= self_id then
+    if not steal.CMDS[action.cmd_no] then
         return {}
     end
     local kind = steal.ABILITIES[action.cmd_arg]
     if kind == nil then
         return {}
     end
+    local own = action.actor_id == self_id
     local out = {}
     for _, target in ipairs(action.targets) do
         for _, res in ipairs(target.results) do
@@ -63,7 +64,11 @@ function steal.from_action(action, self_id)
                 elseif result == 'item' then
                     ev.result = 'failed'
                 end
-                out[#out + 1] = ev
+                -- Several reporters can see one steal by another player, so
+                -- only their item results are kept; failures would stack up.
+                if own or ev.result == 'item' then
+                    out[#out + 1] = ev
+                end
             end
         end
     end

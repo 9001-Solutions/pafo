@@ -6,7 +6,7 @@ guesses. It records:
 
 - mob kills and what landed in the treasure pool
 - battlefield armoury crates
-- your own Steal and Despoil results
+- Steal and Despoil results (yours, plus other players' successful steals)
 
 It also works out your Treasure Hunter level, since that changes the odds.
 
@@ -55,7 +55,9 @@ PSXI can't be reached they wait on disk and go out later.
   remembers the answer.
 - **Battlefields.** Opening the armoury crate records the loot and gil. Zone
   out before the window closes and it's sent as a partial run.
-- **Steal and Despoil.** Your own attempts, successful or not.
+- **Steal and Despoil.** Your own attempts, successful or not, plus other
+  players' successful steals, since the item is what tells us a monster's
+  steal table.
 
 Settings, your token, and any unsent reports live in
 `<Ashita>\config\addons\pafo\`.
