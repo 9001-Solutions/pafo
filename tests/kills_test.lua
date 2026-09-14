@@ -143,3 +143,30 @@ h.check('two mobs dying together keep drops separate', function()
     h.eq(#by.A.drops, 0)
     h.eq(by.B.drops[1].item_id, 500)
 end)
+
+h.check('THF hint sticks to an actor once seen on a mob and only rises', function()
+    local t = kills.new(0)
+    local anon = { server_id = 2, name = 'Shadow', is_self = false, main_job = 0, sub_job = 0, level = 0 }
+    kills.on_action(t, MOB, anon, 100, 100)
+    anon.thf_hint = 1
+    kills.on_action(t, MOB, anon, 101, 90)
+    anon.thf_hint = 0
+    local a = kills.on_action(t, MOB, anon, 102, 80)
+    h.eq(a.thf_hint, 1)
+    anon.thf_hint = nil
+    a = kills.on_action(t, MOB, anon, 103, 70)
+    h.eq(a.thf_hint, 1)
+    kills.on_death(t, MOB, 110, { name = 'Bee', claimed = true, zone_id = 1 })
+    local events = finalize(t, 120)
+    h.eq(events[1].th.min, 1)
+    h.eq(events[1].th.exact, false)
+    h.eq(events[1].th.source, 'unknown')
+    t = kills.new(0)
+    anon.thf_hint = 1
+    kills.on_action(t, MOB, anon, 100, 100)
+    kills.on_death(t, MOB, 110, { name = 'Bee', claimed = true, zone_id = 1 })
+    events = finalize(t, 120, function() return 1 end)
+    h.eq(events[1].th.min, 1)
+    h.eq(events[1].th.exact, true)
+    h.eq(events[1].th.source, 'user_prompted')
+end)

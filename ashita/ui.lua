@@ -11,12 +11,12 @@ function ui.new(callbacks)
     }
 end
 
-function ui.prompt(u, name)
+function ui.prompt(u, name, min_tier, note)
     if u.prompted[name] then
         return false
     end
     u.prompted[name] = true
-    u.prompts[#u.prompts + 1] = name
+    u.prompts[#u.prompts + 1] = { name = name, min = min_tier or 2, note = note }
     return true
 end
 
@@ -36,17 +36,42 @@ local function pop_prompt(u)
     table.remove(u.prompts, 1)
 end
 
+local function tier_list(min_tier)
+    local parts = {}
+    for tier = math.max(min_tier, 1), 4 do
+        parts[#parts + 1] = ('TH%d'):fmt(tier)
+    end
+    if min_tier <= 0 then
+        parts[#parts + 1] = 'none'
+    end
+    if #parts == 1 then
+        return parts[1]
+    end
+    return table.concat(parts, ', ', 1, #parts - 1) .. ', or ' .. parts[#parts]
+end
+
+local function tier_label(tier)
+    if tier == 0 then
+        return 'None'
+    end
+    return ('TH%d'):fmt(tier)
+end
+
 local function render_prompt(u)
-    local name = u.prompts[1]
-    if name == nil then
+    local p = u.prompts[1]
+    if p == nil then
         return
     end
+    local name = p.name
     imgui.SetNextWindowSize({ 360, -1 }, ImGuiCond_FirstUseEver)
     if imgui.Begin('pafo TH###pafo_th_prompt', nil, bit.bor(ImGuiWindowFlags_NoCollapse, ImGuiWindowFlags_AlwaysAutoResize, ImGuiWindowFlags_NoSavedSettings)) then
-        imgui.Text(('Does %s have TH2, TH3, or TH4?'):fmt(name))
+        imgui.Text(('Does %s have %s?'):fmt(name, tier_list(p.min)))
+        if p.note then
+            imgui.TextDisabled(p.note)
+        end
         imgui.Spacing()
-        for tier = 2, 4 do
-            if imgui.Button(('TH%d'):fmt(tier), { 70, 24 }) then
+        for tier = p.min, 4 do
+            if imgui.Button(tier_label(tier), { 70, 24 }) then
                 u.callbacks.answer(name, tier)
                 pop_prompt(u)
             end

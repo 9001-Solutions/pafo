@@ -1,6 +1,6 @@
 addon.name = 'pafo'
 addon.author = 'Hanayaka'
-addon.version = '0.2.0'
+addon.version = '0.3.0'
 addon.desc = 'Records drop observations and submits them to the PSXI drop-rate aggregator.'
 addon.link = 'https://www.psxi.gg/'
 
@@ -45,6 +45,7 @@ local session = {
     detected = false,
     server_announced = false,
     dismissed = {},
+    thf_hints = {},
     last_tick = 0,
 }
 
@@ -257,18 +258,20 @@ local function member_actor(server_id)
         sub_job = m.sub_job,
         level = m.level,
         gear_sources = 0,
+        thf_hint = session.thf_hints[m.server_id],
     }
 end
 
 local function maybe_prompt(actor)
-    if not th.needs_prompt(actor) or session.dismissed[actor.name] then
+    if session.dismissed[actor.name] then
         return
     end
     actor.answer = cached_answer(actor.name)
-    if actor.answer ~= nil then
+    local min_tier = th.prompt_min(actor)
+    if min_tier == nil then
         return
     end
-    uilib.prompt(session.ui, actor.name)
+    uilib.prompt(session.ui, actor.name, min_tier, th.hint_note(actor))
 end
 
 local function handle_action(data)
@@ -288,6 +291,11 @@ local function handle_action(data)
             local ent = game.entity_by_id(ev.mob_id)
             push_event(steallib.to_event(ev, t, zone, ent and ent.name or 'unknown'))
         end
+    end
+
+    local floor = th.hint_floor(action.cmd_no, action.cmd_arg)
+    if floor ~= nil and (session.thf_hints[action.actor_id] or -1) < floor then
+        session.thf_hints[action.actor_id] = floor
     end
 
     if not packets.HOSTILE_CMDS[action.cmd_no] then
@@ -598,7 +606,7 @@ ashita.events.register('load', 'pafo_load', function()
         answer = function(name, tier)
             state.th_answers[answer_key(name)] = tier
             save_state()
-            msg(('%s recorded as TH%d'):format(name, tier))
+            msg(tier == 0 and ('%s recorded as not a THF'):format(name) or ('%s recorded as TH%d'):format(name, tier))
         end,
         dismiss = function(name)
             session.dismissed[name] = true

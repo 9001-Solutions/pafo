@@ -237,9 +237,28 @@ acting on the mob (any hostile action: melee, ranged, spell, JA):
      `{min: N, exact: true, source: "user_prompted"}`. Unanswered ->
      `{min: 2, exact: false, source: "unknown"}` ("TH2+ (unknown)").
 5. Multiple qualifying THFs: take the highest resolved tier; if an
-   unresolved 75 THF could exceed the best exact tier, report the best
-   exact value as `min` with `exact: false` (e.g. self TH3 exact plus an
-   unanswered 75 THF -> `{min: 3, exact: false}`).
+   unresolved THF (4 or 6) could exceed the best exact tier, report the
+   best exact value as `min` with `exact: false` (e.g. self TH3 exact
+   plus an unanswered 75 THF -> `{min: 3, exact: false}`). When the
+   best exact tier is no higher than the unresolved floor (2 for a 75
+   THF, 1 for an anonymous THF), report the floor as `unknown`.
+6. Anonymous party members (`/anon`) arrive with main job, sub job and
+   levels all 0, so rules 1-5 cannot see them. Their actions instead
+   prove a TH floor, kept per character for the session (survives
+   zoning; the highest floor seen wins):
+   - Evisceration (WS 25): floor 0. Any job with dagger 230 (RDM, BRD)
+     can use it, so it only marks the member as a possible THF.
+   - Sneak Attack (JA 44) or Trick Attack (JA 76): floor 1. These need
+     THF as main or sub, and any such job has at least TH1.
+   - Accomplice (JA 84) or Collaborator (JA 236): floor 2. THF main
+     only, level 65+, so TH2 is guaranteed.
+   A hinted member follows the prompt path with the buttons starting at
+   the floor (a floor of 0 adds a "None" answer meaning not a THF).
+   Answered N > 0 -> `{min: N, exact: true, source: "user_prompted"}`,
+   with N raised to the floor if lower. Answered "None" -> the member
+   contributes nothing. Unanswered -> `{min: floor, exact: false,
+   source: "unknown"}`. A hint is ignored as soon as the member's job
+   becomes visible.
 
 Source ranking used by the backend when merging multiple reports of one
 kill (highest wins): `gear_detected` > `user_prompted` >
@@ -250,7 +269,10 @@ tighten (raise `min`, set `exact`), never loosen.
 
 When a not-previously-seen level 75 THF (not the player) first acts on a
 mob the addon will report, show a small non-blocking prompt: "Does
-<name> have TH2, TH3, or TH4?" with a dismiss option.
+<name> have TH2, TH3, or TH4?" with a dismiss option. For an anonymous
+member flagged by rule 6 the choices start at the proven floor (for
+example "Does <name> have TH1, TH2, TH3, TH4, or none?" after
+Evisceration only) and a note says which ability was seen.
 
 - The answer is cached per (server, character name) in local settings
   and reused for all future kills until invalidated.
@@ -316,6 +338,10 @@ mob the addon will report, show a small non-blocking prompt: "Does
 
 ## 10. Spec changelog
 
+- 2026-09-14: anonymous party members get a TH floor from ability use
+  (Evisceration 0, Sneak/Trick Attack 1, Accomplice/Collaborator 2);
+  their prompt starts at that floor and unanswered kills report
+  `{min: floor, exact: false, source: "unknown"}`.
 - 2026-09-11a: other players' successful steals and despoils are
   recorded (item only, no failures); quest-swapped steal items noted.
 - 2026-09-10d: `/pafo server` removed. The active server comes only from

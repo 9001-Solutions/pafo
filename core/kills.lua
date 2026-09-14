@@ -52,6 +52,9 @@ function kills.on_action(t, mob_id, actor, now, mob_hpp)
     a.main_job = actor.main_job
     a.sub_job = actor.sub_job
     a.level = actor.level
+    if actor.thf_hint ~= nil and (a.thf_hint == nil or actor.thf_hint > a.thf_hint) then
+        a.thf_hint = actor.thf_hint
+    end
     if actor.is_self and (actor.gear_sources or 0) > a.gear_sources then
         a.gear_sources = actor.gear_sources
     end
