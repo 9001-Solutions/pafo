@@ -79,6 +79,13 @@ h.check('content-length response completes without waiting for close', function(
     h.eq(http.body(r), 'hi')
 end)
 
+h.check('chunked response closed after the last chunk but before the final crlf is complete', function()
+    local r = parse_whole('HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nok\r\n0\r\n', {})
+    h.truthy(r)
+    h.eq(r.status, 200)
+    h.eq(http.body(r), 'ok')
+end)
+
 h.check('interim, empty, and header-merge responses', function()
     local r = parse_whole('HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 204 No Content\r\nSet-Cookie: a\r\nSet-Cookie: b\r\n\r\n', {})
     h.eq(r.status, 204)

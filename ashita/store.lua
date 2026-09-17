@@ -55,6 +55,37 @@ function store.write(name, data)
     return true
 end
 
+store.LOG_NAME = 'pafo.log'
+store.LOG_MAX_BYTES = 1024 * 1024
+
+function store.append_log(line)
+    local d = dir()
+    if not ashita.fs.exists(d) then
+        ashita.fs.create_directory(d)
+    end
+    local path = store.path(store.LOG_NAME)
+    local f = io.open(path, 'ab')
+    if f == nil then
+        return false
+    end
+    local size = f:seek('end') or 0
+    if size >= store.LOG_MAX_BYTES then
+        f:close()
+        local old = path .. '.1'
+        if ashita.fs.exists(old) then
+            ashita.fs.remove(old)
+        end
+        os.rename(path, old)
+        f = io.open(path, 'ab')
+        if f == nil then
+            return false
+        end
+    end
+    f:write(line, '\r\n')
+    f:close()
+    return true
+end
+
 function store.defaults()
     return {
         token = '',

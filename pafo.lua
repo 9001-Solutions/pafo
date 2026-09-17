@@ -1,6 +1,6 @@
 addon.name = 'pafo'
 addon.author = 'Hanayaka'
-addon.version = '0.3.0'
+addon.version = '0.3.2'
 addon.desc = 'Records drop observations and submits them to the PSXI drop-rate aggregator.'
 addon.link = 'https://www.psxi.gg/'
 
@@ -49,12 +49,18 @@ local session = {
     last_tick = 0,
 }
 
+local function trace(text)
+    pcall(store.append_log, os.date('%Y-%m-%d %H:%M:%S ') .. tostring(text))
+end
+
 local function msg(text)
     print('\30\08[pafo] \30\01' .. tostring(text))
+    trace('msg: ' .. tostring(text))
 end
 
 local function log(text)
     print('\30\08[pafo] \30\06' .. tostring(text))
+    trace('log: ' .. tostring(text))
 end
 
 local function now()
@@ -174,6 +180,7 @@ local function detect_server()
     session.detected_host = host
     local slug = configlib.slug_for_host(cfg, host)
     session.detected = slug ~= nil
+    trace(('detect server: host=%s slug=%s config=%s'):format(tostring(host), tostring(slug), tostring(cfg ~= nil)))
     -- The server comes only from detection, never from saved settings: this
     -- overwrites whatever pafo.json holds so it cannot be hand-edited.
     if (state.server or '') == (slug or '') then
@@ -191,6 +198,9 @@ local function fetch_config()
             local ok, err = apply_config(body, false)
             if not ok then
                 log('config rejected: ' .. tostring(err))
+            else
+                trace(('config applied: ingest_url=%s batch=%d/%ds'):format(cfg.ingest_url,
+                    cfg.batch.max_events, cfg.batch.flush_seconds))
             end
         else
             local reason = status == nil and tostring(body or 'network error') or ('http ' .. tostring(status))
@@ -562,6 +572,7 @@ local function print_status()
     msg('capture: ' .. (state.capture and 'on' or 'off'))
     msg('queue: ' .. queue_text())
     msg('config: ' .. config_age_text())
+    msg('log: ' .. store.path(store.LOG_NAME))
 end
 
 local function print_help()
@@ -588,8 +599,11 @@ end
 
 ashita.events.register('load', 'pafo_load', function()
     math.randomseed(os.time() + math.floor(os.clock() * 1000000))
-    transport.init(addon.path)
+    trace(('---- load pafo %s'):format(addon.version))
+    transport.init(addon.path, trace)
     state = store.load_state()
+    trace(('state: server=%s capture=%s linked=%s cached_config=%s'):format(tostring(state.server),
+        tostring(state.capture), tostring(state.token ~= nil and state.token ~= ''), tostring(state.config ~= nil)))
     session.kills = kills.new(now())
     session.submit = submitlib.new({
         now = now,
@@ -597,6 +611,7 @@ ashita.events.register('load', 'pafo_load', function()
         send = send_batch,
         notify = msg,
         log = log,
+        trace = trace,
         persist = persist_queue,
         on_auth_lost = on_auth_lost,
         on_server_disabled = on_server_disabled,
@@ -643,6 +658,7 @@ ashita.events.register('unload', 'pafo_unload', function()
     if session.submit then
         pcall(flush_partial_crate)
         persist_queue()
+        trace('---- unload; queue: ' .. queue_text())
     end
     if state then
         save_state()

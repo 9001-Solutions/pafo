@@ -7,6 +7,7 @@ local function fake(overrides)
         sent = {},
         notices = {},
         logs = {},
+        traces = {},
         persisted = 0,
         auth_lost = 0,
         disabled = 0,
@@ -32,6 +33,7 @@ local function fake(overrides)
         end,
         notify = function(t) f.notices[#f.notices + 1] = t end,
         log = function(t) f.logs[#f.logs + 1] = t end,
+        trace = function(t) f.traces[#f.traces + 1] = t end,
         persist = function() f.persisted = f.persisted + 1 end,
         on_auth_lost = function() f.auth_lost = f.auth_lost + 1 end,
         on_server_disabled = function() f.disabled = f.disabled + 1 end,
@@ -182,6 +184,34 @@ h.check('a request that never answers is released after the timeout', function()
     f.clock = 1000 + submit.IN_FLIGHT_TIMEOUT + 1
     h.eq(submit.tick(s), true)
     h.eq(#f.sent, 2)
+end)
+
+h.check('attempts, transport errors and block reasons are traced', function()
+    local f = fake({ ctx_reason = 'no_player' })
+    local s = submit.new(f.deps)
+    submit.push(s, ev('a', 900))
+    submit.tick(s)
+    submit.tick(s)
+    h.eq(#f.traces, 1)
+    h.truthy(f.traces[1]:find('blocked: no_player', 1, true))
+    f.ctx_reason = nil
+    submit.tick(s)
+    h.truthy(f.traces[2]:find('unblocked', 1, true))
+    h.truthy(f.traces[3]:find('ingest #1: sending 1 of 1', 1, true))
+    f.clock = 1004
+    f.sent[1].cb(nil, 'tls: timeout')
+    h.truthy(f.traces[4]:find('status=nil kind=retry reason=tls: timeout', 1, true))
+    h.truthy(f.traces[4]:find('after 4s', 1, true))
+    h.truthy(f.logs[1]:find('attempt 1, retrying in 30s', 1, true))
+end)
+
+h.check('an auth halt is logged with the server error', function()
+    local f = fake()
+    local s = submit.new(f.deps)
+    submit.push(s, ev('a', 900))
+    submit.tick(s)
+    f.sent[1].cb(401, { error = 'invalid_token' })
+    h.truthy(f.logs[1]:find('401 invalid_token', 1, true))
 end)
 
 h.check('rate limit uses retry_after', function()

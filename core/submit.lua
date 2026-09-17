@@ -14,8 +14,19 @@ function submit.new(deps)
         last_error = nil,
         in_flight_at = nil,
         last_result = nil,
+        blocked = nil,
         seq = 0,
     }
+end
+
+local function body_error(body)
+    if type(body) == 'table' then
+        return body.error
+    end
+    if body ~= nil then
+        return tostring(body):sub(1, 200)
+    end
+    return nil
 end
 
 function submit.push(s, event)
@@ -34,9 +45,16 @@ function submit.tick(s)
     if s.q.in_flight and s.in_flight_at and now - s.in_flight_at > submit.IN_FLIGHT_TIMEOUT then
         queue.release(s.q)
         s.in_flight_at = nil
-        s.deps.log('ingest request timed out without a response')
+        s.deps.log(('ingest #%d timed out after %ds without a response; the transport task never called back'):format(
+            s.seq, submit.IN_FLIGHT_TIMEOUT))
     end
     local ctx, reason = s.deps.context()
+    local blocked = ctx == nil and tostring(reason) or nil
+    if blocked ~= s.blocked then
+        s.deps.trace(blocked and ('submit blocked: %s (queue %d)'):format(blocked, queue.depth(s.q))
+            or ('submit unblocked (queue %d)'):format(queue.depth(s.q)))
+        s.blocked = blocked
+    end
     if ctx == nil then
         if reason == 'no_server' and not s.prompted_server and queue.depth(s.q) > 0 then
             s.prompted_server = true
@@ -52,6 +70,8 @@ function submit.tick(s)
     s.in_flight_at = now
     s.seq = s.seq + 1
     local seq = s.seq
+    s.deps.trace(('ingest #%d: sending %d of %d queued events to %s (attempt %d, server %s)'):format(
+        seq, #events, queue.depth(s.q), ctx.ingest_url, s.q.attempts + 1, tostring(ctx.server_slug)))
     s.deps.send(ctx.ingest_url .. '/ingest', ctx.token, body, function(status, resp, headers)
         submit.handle(s, status, resp, headers, seq)
     end)
@@ -60,14 +80,18 @@ end
 
 function submit.handle(s, status, body, headers, seq)
     if seq ~= nil and seq ~= s.seq then
-        s.deps.log('ignoring a late ingest response')
+        s.deps.log(('ignoring a late response for ingest #%d (status %s, current #%d)'):format(
+            seq, tostring(status), s.seq))
         return nil
     end
     if not s.q.in_flight then
+        s.deps.trace(('ingest #%s: response with nothing in flight (status %s)'):format(tostring(seq), tostring(status)))
         return nil
     end
     local now = s.deps.now()
     local r = ingest.classify(status, body, headers)
+    s.deps.trace(('ingest #%s: status=%s kind=%s reason=%s error=%s after %ds'):format(tostring(seq),
+        tostring(status), r.kind, tostring(r.reason), tostring(body_error(body)), now - (s.in_flight_at or now)))
     s.in_flight_at = nil
     s.last_result = r.kind
     if r.kind == 'ok' then
@@ -92,16 +116,18 @@ function submit.handle(s, status, body, headers, seq)
     elseif r.kind == 'retry' or r.kind == 'rate_limited' then
         local delay = queue.finish_retry(s.q, now, r.retry_after)
         s.last_error = r.reason or 'rate limited'
-        s.deps.log(('ingest failed (%s); retrying in %ds'):format(s.last_error, delay))
+        s.deps.log(('ingest failed (%s); attempt %d, retrying in %ds'):format(s.last_error, s.q.attempts, delay))
         s.deps.persist()
     elseif r.kind == 'auth' then
         queue.finish_halt(s.q, 'auth')
         s.last_error = 'token revoked'
+        s.deps.log(('ingest halted: 401 %s; sending stops until /pafo login'):format(tostring(body_error(body))))
         s.deps.persist()
         s.deps.on_auth_lost()
     elseif r.kind == 'outdated' then
         queue.finish_halt(s.q, 'outdated')
         s.last_error = 'protocol rejected'
+        s.deps.log('ingest halted: protocol rejected; sending stops until reload')
         s.deps.persist()
         s.deps.on_outdated()
     elseif r.kind == 'server_disabled' then

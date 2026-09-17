@@ -180,7 +180,7 @@ function http.close(r)
     if r.state == 'done' then
         return true
     end
-    if r.state == 'until_close' then
+    if r.state == 'until_close' or r.state == 'trailers' then
         r.state = 'done'
         return true
     end
